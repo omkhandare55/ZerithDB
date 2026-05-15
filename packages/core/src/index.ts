@@ -15,5 +15,5 @@ export type {
   FindResult,
 } from "./types/db.js";
 export type { PeerId, PeerInfo, RoomId, NetworkMessage } from "./types/network.js";
-export type { Identity, PublicKey, Signature } from "./types/auth.js";
+export type { Identity, PublicKey, Signature, IAuthManager } from "./types/auth.js";
 export type { SyncUpdate, SyncState, AwarenessState, SyncProtocol } from "./types/sync.js";

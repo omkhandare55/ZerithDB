@@ -25,6 +25,13 @@ export interface AuthConfig {
    * @default "__zerithdb_identity"
    */
   storageKey?: string;
+
+  /**
+   * URL of the shared wallet iframe to use for cross-origin identity.
+   * If provided, ZerithDB will use this shared wallet for authentication
+   * and file picking instead of local storage.
+   */
+  walletUrl?: string;
 }
 
 export interface NetworkConfig {

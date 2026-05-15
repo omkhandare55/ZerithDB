@@ -1,6 +1,6 @@
 import * as ed from "@noble/ed25519";
 import { sha512 } from "@noble/hashes/sha2.js";
-import type { ZerithDBConfig, Identity, Signature } from "zerithdb-core";
+import type { ZerithDBConfig, Identity, Signature, IAuthManager } from "zerithdb-core";
 import { ZerithDBError, ErrorCode } from "zerithdb-core";
 
 // noble/ed25519 requires a sha512 implementation
@@ -11,7 +11,7 @@ ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
  * Identities are stored in localStorage as hex-encoded keys.
  * No servers involved — identity is fully self-sovereign.
  */
-export class AuthManager {
+export class AuthManager implements IAuthManager {
   private readonly storageKey: string;
   private _identity: Identity | null = null;
   private privateKeyBytes: Uint8Array | null = null;

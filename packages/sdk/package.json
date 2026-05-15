@@ -41,7 +41,8 @@
     "zerithdb-core": "workspace:*",
     "zerithdb-db": "workspace:*",
     "zerithdb-network": "workspace:*",
-    "zerithdb-sync": "workspace:*"
+    "zerithdb-sync": "workspace:*",
+    "zerithdb-wallet": "workspace:*"
   },
   "devDependencies": {
     "zerithdb-eslint-config": "workspace:*",

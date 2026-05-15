@@ -1,7 +1,7 @@
 import SimplePeer from "simple-peer";
 import type { ZerithDBConfig, PeerId, PeerInfo } from "zerithdb-core";
 import { EventEmitter, ZerithDBError, ErrorCode } from "zerithdb-core";
-import type { AuthManager } from "zerithdb-auth";
+import type { IAuthManager } from "zerithdb-core";
 
 type NetworkEvents = {
   "peer:connected": PeerInfo;
@@ -35,7 +35,7 @@ export class NetworkManager extends EventEmitter<NetworkEvents> {
 
   constructor(
     private readonly config: ZerithDBConfig,
-    private readonly auth: AuthManager
+    private readonly auth: IAuthManager
   ) {
     super();
   }

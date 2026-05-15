@@ -15,3 +15,11 @@ export interface Identity {
   /** Created at Unix timestamp (ms) */
   createdAt: number;
 }
+
+export interface IAuthManager {
+  readonly identity: Identity | null;
+  signIn(): Promise<Identity>;
+  signOut(): void;
+  sign(data: Uint8Array): Promise<Signature>;
+  verify(data: Uint8Array, signature: Signature, publicKey: string): Promise<boolean>;
+}

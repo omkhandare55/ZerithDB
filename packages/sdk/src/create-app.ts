@@ -1,7 +1,8 @@
-import type { ZerithDBConfig } from "zerithdb-core";
+import type { ZerithDBConfig, IAuthManager } from "zerithdb-core";
 import { DbClient, CollectionClient } from "./db-client.js";
 import { SyncEngine } from "./sync-engine.js";
-import { AuthManager } from "./auth-manager.js";
+import { AuthManager } from "zerithdb-auth";
+import { WalletProxy } from "zerithdb-wallet";
 import { NetworkManager } from "./network-manager.js";
 
 /**
@@ -28,13 +29,24 @@ export interface ZerithDBApp {
   sync: SyncEngine;
 
   /** Authentication manager — keypair identity and message signing */
-  auth: AuthManager;
+  auth: IAuthManager;
 
   /** P2P network manager — WebRTC peer connections and signaling */
   network: NetworkManager;
 
   /** Underlying app configuration */
   config: Readonly<ZerithDBConfig>;
+
+  /**
+   * Open the Universal File Picker to let the user select data from any of their
+   * ZerithDB applications. Requires a configured Data Wallet.
+   *
+   * @returns The picked data and its metadata, or null if cancelled.
+   */
+  pickFile(params?: {
+    collection?: string;
+    title?: string;
+  }): Promise<{ collection: string; id: string; data: any } | null>;
 
   /**
    * Tear down the application — close all peer connections, stop sync,
@@ -85,7 +97,10 @@ export function createApp(config: ZerithDBConfig): ZerithDBApp {
     },
   };
 
-  const auth = new AuthManager(resolvedConfig);
+  const auth = resolvedConfig.auth?.walletUrl
+    ? new WalletProxy(resolvedConfig)
+    : new AuthManager(resolvedConfig);
+
   const db = new DbClient(resolvedConfig);
   const network = new NetworkManager(resolvedConfig, auth);
   const sync = new SyncEngine(resolvedConfig, db, network);
@@ -106,6 +121,13 @@ export function createApp(config: ZerithDBConfig): ZerithDBApp {
     sync,
     auth,
     network,
+
+    async pickFile(params?: any): Promise<any> {
+      if (auth instanceof WalletProxy) {
+        return auth.pickFile(params);
+      }
+      throw new Error("pickFile requires a configured walletUrl in auth config");
+    },
 
     async dispose(): Promise<void> {
       await Promise.all([sync.dispose(), network.dispose(), db.dispose()]);
