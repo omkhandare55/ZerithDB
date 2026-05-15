@@ -58,7 +58,9 @@ export class SyncEngine extends EventEmitter<SyncEvents> {
    * rules without dropping existing peer connections.
    */
   setProtocol(protocol: SyncProtocol): void {
-    console.log(`[SyncEngine] Switching protocol: ${this.protocol.name} v${this.protocol.version} -> ${protocol.name} v${protocol.version}`);
+    console.log(
+      `[SyncEngine] Switching protocol: ${this.protocol.name} v${this.protocol.version} -> ${protocol.name} v${protocol.version}`
+    );
     this.protocol = protocol;
   }
 
@@ -127,7 +129,8 @@ export class SyncEngine extends EventEmitter<SyncEvents> {
   // ─── Private ──────────────────────────────────────────────────────────────
 
   private onPeerUpdate(msg: { type: string; payload: Uint8Array | string; from: string }): void {
-    const payload = typeof msg.payload === "string" || msg.payload instanceof Uint8Array ? msg.payload : null;
+    const payload =
+      typeof msg.payload === "string" || msg.payload instanceof Uint8Array ? msg.payload : null;
     if (payload === null) return;
 
     const decoded = this.protocol.decode(payload);
