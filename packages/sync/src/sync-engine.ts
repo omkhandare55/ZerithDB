@@ -4,6 +4,8 @@ import type { ZerithDBConfig, SyncState } from "zerithdb-core";
 import { EventEmitter } from "zerithdb-core";
 import type { DbClient } from "zerithdb-db";
 import type { NetworkManager } from "zerithdb-network";
+import type { SyncProtocol } from "zerithdb-core";
+import { DefaultSyncProtocol } from "./protocol.js";
 
 type SyncEvents = {
   "state:change": SyncState;
@@ -21,6 +23,7 @@ export class SyncEngine extends EventEmitter<SyncEvents> {
   private readonly persistences = new Map<string, IndexeddbPersistence>();
   private _enabled = false;
   private _state: SyncState = { synced: false, pendingUpdates: 0, connectedPeers: 0 };
+  private protocol: SyncProtocol = new DefaultSyncProtocol();
 
   constructor(
     private readonly config: ZerithDBConfig,
@@ -47,6 +50,16 @@ export class SyncEngine extends EventEmitter<SyncEvents> {
     this._enabled = false;
     this.network.off("message", this.onPeerUpdate);
     this.updateState({ synced: false });
+  }
+
+  /**
+   * Update the sync protocol at runtime.
+   * This allows hot-reloading different wire formats or conflict resolution
+   * rules without dropping existing peer connections.
+   */
+  setProtocol(protocol: SyncProtocol): void {
+    console.log(`[SyncEngine] Switching protocol: ${this.protocol.name} v${this.protocol.version} -> ${protocol.name} v${protocol.version}`);
+    this.protocol = protocol;
   }
 
   /** Current sync state snapshot */
@@ -81,7 +94,7 @@ export class SyncEngine extends EventEmitter<SyncEvents> {
       this.emit("update:local", { collectionName, update });
       this.network.broadcast({
         type: "sync-update",
-        payload: this.encodeMessage(collectionName, update),
+        payload: this.protocol.encode(collectionName, update),
       });
     });
 
@@ -114,56 +127,17 @@ export class SyncEngine extends EventEmitter<SyncEvents> {
   // ─── Private ──────────────────────────────────────────────────────────────
 
   private onPeerUpdate(msg: { type: string; payload: Uint8Array | string; from: string }): void {
-    if (msg.type !== "sync-update") return;
+    const payload = typeof msg.payload === "string" || msg.payload instanceof Uint8Array ? msg.payload : null;
+    if (payload === null) return;
 
-    const payload = typeof msg.payload === "string" ? base64ToBytes(msg.payload) : msg.payload;
-
-    const decoded = this.decodeMessage(payload);
+    const decoded = this.protocol.decode(payload);
     if (decoded === null) return;
 
     this.applyRemoteUpdate(decoded.collectionName, decoded.update, msg.from);
-  }
-
-  private encodeMessage(collectionName: string, update: Uint8Array): string {
-    const nameBytes = new TextEncoder().encode(collectionName);
-    const header = new Uint8Array([nameBytes.length]);
-    const combined = new Uint8Array(1 + nameBytes.length + update.length);
-    combined.set(header, 0);
-    combined.set(nameBytes, 1);
-    combined.set(update, 1 + nameBytes.length);
-    return bytesToBase64(combined);
-  }
-
-  private decodeMessage(bytes: Uint8Array): {
-    collectionName: string;
-    update: Uint8Array;
-  } | null {
-    try {
-      const nameLen = bytes[0];
-      if (nameLen === undefined) return null;
-      const nameBytes = bytes.slice(1, 1 + nameLen);
-      const update = bytes.slice(1 + nameLen);
-      return {
-        collectionName: new TextDecoder().decode(nameBytes),
-        update,
-      };
-    } catch {
-      return null;
-    }
   }
 
   private updateState(partial: Partial<SyncState>): void {
     this._state = { ...this._state, ...partial };
     this.emit("state:change", this._state);
   }
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function bytesToBase64(bytes: Uint8Array): string {
-  return btoa(String.fromCharCode(...bytes));
-}
-
-function base64ToBytes(b64: string): Uint8Array {
-  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 }
