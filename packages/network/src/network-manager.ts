@@ -45,6 +45,7 @@ export type MediaStreamMetadataInput = Partial<
   >
 > & { kind?: MediaStreamKind };
 
+
 interface SignalingMessage {
   type: "offer" | "answer" | "ice-candidate" | "peer-list";
   from: string;
@@ -106,6 +107,7 @@ export class NetworkManager extends EventEmitter<NetworkEvents> {
     return this.nameRegistry.resolve(name);
   }
 
+  /** The local peer ID assigned to this instance */
   get peerId(): PeerId {
     return this.localPeerId;
   }
@@ -196,9 +198,10 @@ export class NetworkManager extends EventEmitter<NetworkEvents> {
    */
   broadcast(message: { type: string; payload: string | Uint8Array }): void {
     const data = JSON.stringify(message);
-    for (const [, peer] of this.peers) {
+    const bytesLength = typeof TextEncoder !== "undefined" ? new TextEncoder().encode(data).length : data.length;
+    for (const [peerId, peer] of this.peers) {
       if (peer.connected) {
-        peer.send(data);
+        this.throttledSend(peerId, peer, data, bytesLength);
       }
     }
   }
@@ -209,9 +212,97 @@ export class NetworkManager extends EventEmitter<NetworkEvents> {
   sendTo(peerId: PeerId, message: { type: string; payload: string | Uint8Array }): void {
     const peer = this.peers.get(peerId);
     if (peer?.connected) {
-      peer.send(JSON.stringify(message));
+      const data = JSON.stringify(message);
+      const bytesLength = typeof TextEncoder !== "undefined" ? new TextEncoder().encode(data).length : data.length;
+      this.throttledSend(peerId, peer, data, bytesLength);
     }
   }
+
+  /**
+   * Send data with reputation-based throttling.
+   */
+  private throttledSend(peerId: PeerId, peer: SimplePeer.Instance, data: string, bytesLength: number): void {
+    const info = this.peerInfo.get(peerId);
+    const rep = info ? info.reputation : 1.0;
+
+    if (rep > 0.5) {
+      peer.send(data);
+      this.updateReputation(peerId, 0, bytesLength);
+    } else {
+      // Throttle peers with low reputation (0.0 to 0.5)
+      // Delay scales from 500ms (rep 0.5) to 1000ms (rep 0.0)
+      const delay = Math.floor((1 - rep) * 1000);
+      const peerState = peer as any;
+      
+      if (!peerState._sendQueue) peerState._sendQueue = [];
+      
+      // Prevent memory exhaustion DoS
+      if (peerState._sendQueue.length > 50) {
+        console.warn(`[ZerithDB] Dropping messages to leech peer ${peerId} (queue full)`);
+        return;
+      }
+      
+      peerState._sendQueue.push({ data, bytesLength });
+      
+      // Ensure only one timer is running per peer
+      if (!peerState._sendTimer) {
+        const drain = () => {
+          if (!peer.connected) {
+            peerState._sendTimer = null;
+            return;
+          }
+          
+          const msg = peerState._sendQueue.shift();
+          if (msg) {
+            peer.send(msg.data);
+            this.updateReputation(peerId, 0, msg.bytesLength);
+          }
+          
+          if (peerState._sendQueue.length > 0) {
+            peerState._sendTimer = setTimeout(drain, delay);
+          } else {
+            peerState._sendTimer = null;
+          }
+        };
+        
+        peerState._sendTimer = setTimeout(drain, delay);
+      }
+    }
+  }
+
+  /**
+   * Update a peer's reputation based on data given/taken.
+   */
+  private updateReputation(peerId: PeerId, downloaded: number, uploaded: number): void {
+    const info = this.peerInfo.get(peerId);
+    if (!info) return;
+
+    info.bytesDownloaded += downloaded;
+    info.bytesUploaded += uploaded;
+
+    // Grace period: first 1MB of download is "free"
+    const GRACE_BYTES = 1024 * 1024; // 1 MB
+    if (info.bytesDownloaded === 0 || info.bytesDownloaded < GRACE_BYTES) {
+      info.reputation = 1.0;
+    } else {
+      // Give / Take ratio (safeguarded against division by zero)
+      info.reputation = info.bytesDownloaded > 0 ? info.bytesUploaded / info.bytesDownloaded : 1.0;
+    }
+
+    // Leech protection: Disconnect if taking > 5MB and giving < 5%
+    const LEECH_THRESHOLD = 0.05;
+    const DISCONNECT_BYTES = 5 * 1024 * 1024; // 5 MB
+    
+    if (info.bytesDownloaded > DISCONNECT_BYTES && info.reputation < LEECH_THRESHOLD) {
+      console.warn(`[ZerithDB] Disconnecting leech peer ${peerId}. Reputation: ${info.reputation}`);
+      const peer = this.peers.get(peerId);
+      if (peer) {
+        peer.destroy(); // This triggers 'close' event and cleanup
+      }
+    }
+  }
+
+  // Replaced by sendTo above
 
   /** Number of currently connected peers */
   get connectedPeerCount(): number {
@@ -272,6 +363,7 @@ export class NetworkManager extends EventEmitter<NetworkEvents> {
     this.activeTransportType = null;
   }
 
+
   // ─── Private — Transport setup ────────────────────────────────────────────
 
   private async connectWebSocket(signalingUrl: string, roomId: string): Promise<void> {
@@ -304,12 +396,7 @@ export class NetworkManager extends EventEmitter<NetworkEvents> {
     this.transport = transport;
 
     transport.onMessage((data: string) => {
-      try {
-        const parsed = JSON.parse(data) as SignalingMessage;
-        this.handleSignalingMessage(parsed);
-      } catch (err) {
-        console.warn("[ZerithDB] Received malformed signaling message", err);
-      }
+      this.handleSignalingMessage(JSON.parse(data) as SignalingMessage);
     });
 
     transport.onClose(() => {
@@ -342,11 +429,18 @@ export class NetworkManager extends EventEmitter<NetworkEvents> {
       const existing = this.peerInfo.get(msg.from);
 
       this.peerInfo.set(msg.from, {
-        ...existing,
-        peerId: msg.from,
-        name: msg.name,
-        ens: msg.ens,
-      } as any);
+        ...(existing ?? {
+          peerId: msg.from,
+          did: "",
+          publicKey: "",
+          connectedAt: Date.now(),
+          bytesDownloaded: 0,
+          bytesUploaded: 0,
+          reputation: 1.0,
+        }),
+        name: msg.name ?? existing?.name,
+        ens: msg.ens ?? existing?.ens,
+      });
 
       this.nameRegistry.register({
         name: msg.name,
@@ -391,6 +485,9 @@ export class NetworkManager extends EventEmitter<NetworkEvents> {
               did: "",
               publicKey: "",
               connectedAt: Date.now(),
+              bytesDownloaded: 0,
+              bytesUploaded: 0,
+              reputation: 1.0,
             }),
             name: msg.name ?? existing?.name,
             ens: msg.ens ?? existing?.ens,
@@ -464,8 +561,9 @@ export class NetworkManager extends EventEmitter<NetworkEvents> {
         did: "",
         publicKey: "",
         connectedAt: Date.now(),
-        name: identity?.name,
-        ens: identity?.ens,
+        bytesDownloaded: 0,
+        bytesUploaded: 0,
+        reputation: 1.0,
       };
       this.peerInfo.set(remotePeerId, info);
       this.emit("peer:connected", info);
@@ -480,6 +578,11 @@ export class NetworkManager extends EventEmitter<NetworkEvents> {
 
     peer.on("data", (data: Uint8Array | string) => {
       try {
+        const bytesLength = typeof data === "string" 
+          ? (typeof TextEncoder !== "undefined" ? new TextEncoder().encode(data).length : data.length)
+          : data.byteLength;
+        this.updateReputation(remotePeerId, bytesLength, 0);
+
         const msg = JSON.parse(
           typeof data === "string" ? data : new TextDecoder().decode(data)
         ) as { type: string; payload: string | Uint8Array };
@@ -522,6 +625,7 @@ export class NetworkManager extends EventEmitter<NetworkEvents> {
 
     this.peers.set(remotePeerId, peer);
   }
+
 
   addMediaStream(
     stream: MediaStream,
@@ -723,4 +827,5 @@ export class NetworkManager extends EventEmitter<NetworkEvents> {
       void this.connect(roomId);
     }, backoff + jitter);
   }
+
 }
