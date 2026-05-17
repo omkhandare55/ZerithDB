@@ -32,6 +32,18 @@ export interface AwarenessState {
   [key: string]: unknown;
 }
 
+/** Low-latency ephemeral state for a single peer (non-persistent). */
+export interface EphemeralPeerState<TState extends Record<string, unknown> = Record<string, unknown>> {
+  /** The peer ID of the peer this state belongs to */
+  peerId: string;
+  /** The state object itself */
+  state: TState;
+  /** Incrementing sequence number for conflict-free ordering */
+  sequence: number;
+  /** Timestamp of the last update in Unix milliseconds */
+  updatedAt: number;
+}
+
 export interface SyncPlugin {
   id: string;
   version: number;
@@ -52,15 +64,17 @@ export interface SyncPlugin {
   ) => Uint8Array | null | Promise<Uint8Array | null>;
 }
 
-export interface EphemeralPeerState<
-  TState extends Record<string, unknown> = Record<string, unknown>,
-> {
-  peerId: string;
-  state: TState;
-  sequence: number;
-  updatedAt: number;
+/**
+ * Defines how sync updates are encoded and decoded for network transmission.
+ * Swapping the protocol allows for hot-reloading different wire formats
+ * (e.g. binary, JSON, encrypted) without restarting the sync engine.
+ */
+export interface SyncProtocol {
+  readonly name: string;
+  readonly version: string;
+  encode(collectionName: string, update: Uint8Array): string | Uint8Array;
+  decode(data: string | Uint8Array): { collectionName: string; update: Uint8Array } | null;
 }
-
 export interface ActiveSpeakerState {
   peerId: string;
   streamId?: string;

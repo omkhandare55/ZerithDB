@@ -21,22 +21,14 @@ export type {
   InsertResult,
   FindResult,
 } from "./types/db.js";
-export type {
-  PeerId,
-  PeerInfo,
-  RoomId,
-  NetworkMessage,
-  MediaStreamKind,
-  MediaTrackMetadata,
-  MediaStreamMetadata,
-} from "./types/network.js";
+export type { PeerId, PeerInfo, RoomId, NetworkMessage, MediaStreamMetadata, MediaStreamKind } from "./types/network.js";
 export type { Identity, PublicKey, Signature } from "./types/auth.js";
-
 export type {
   SyncUpdate,
   SyncState,
   AwarenessState,
   SyncPlugin,
+  SyncProtocol,
   EphemeralPeerState,
   ActiveSpeakerState,
   VideoParticipantState,

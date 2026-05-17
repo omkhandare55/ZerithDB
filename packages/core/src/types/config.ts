@@ -35,15 +35,16 @@ export interface SyncConfig {
   transport?: "auto" | "websocket" | "polling";
 
   /**
-   * Configuration options for low-latency ephemeral sync state.
+   * Configuration options for the ephemeral (non-persistent) state sync channel.
    */
-  ephemeral?: EphemeralConfig;
-}
-
-export interface EphemeralConfig {
-  cleanupIntervalMs?: number;
-  throttleMs?: number;
-  staleAfterMs?: number;
+  ephemeral?: {
+    /** Interval in ms for cleaning up stale peer states. @default 5000 */
+    cleanupIntervalMs?: number;
+    /** Time in ms before a peer's state is considered stale. @default 30000 */
+    staleAfterMs?: number;
+    /** Minimum ms between outgoing broadcasts (throttle). @default 0 */
+    throttleMs?: number;
+  };
 }
 
 export interface AuthConfig {
@@ -65,6 +66,16 @@ export interface DebugConfig {
 
 export interface NetworkConfig {
   /**
+   * Human-readable alias for this peer in the mesh.
+   */
+  name?: string;
+
+  /**
+   * Optional ENS identity to attach to this peer.
+   */
+  ens?: string;
+
+  /**
    * Whether to automatically reconnect when a peer disconnects.
    * @default true
    */
@@ -75,11 +86,6 @@ export interface NetworkConfig {
    * @default 1000
    */
   reconnectDelay?: number;
-  /** Optional human-readable peer alias */
-  name?: string;
-
-  /** Optional ENS identity */
-  ens?: string;
 }
 
 export interface ZerithDBConfig {
