@@ -30,13 +30,14 @@ export type {
   MediaTrackMetadata,
   MediaStreamMetadata,
 } from "./types/network.js";
-export type { Identity, PublicKey, Signature } from "./types/auth.js";
+export type { Identity, PublicKey, Signature, IAuthManager, AuthEvents } from "./types/auth.js";
 
 export type {
   SyncUpdate,
   SyncState,
   AwarenessState,
   SyncPlugin,
+  SyncProtocol,
   EphemeralPeerState,
   ActiveSpeakerState,
   VideoParticipantState,

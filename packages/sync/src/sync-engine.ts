@@ -4,10 +4,12 @@ import type { ZerithDBConfig, SyncState, SyncPlugin } from "zerithdb-core";
 import { EventEmitter } from "zerithdb-core";
 import type { DbClient } from "zerithdb-db";
 import type { NetworkManager } from "zerithdb-network";
+import type { SyncProtocol } from "zerithdb-core";
 import { InboxQueue } from "./queue/InboxQueue.js";
 import { OutboxQueue } from "./queue/OutboxQueue.js";
 import { EphemeralStateManager } from "./ephemeral-state.js";
 import { bytesToBase64, base64ToBytes } from "zerithdb-utils";
+import { DefaultSyncProtocol } from "./protocol.js";
 
 type SyncEvents = {
   "state:change": SyncState;
@@ -35,6 +37,7 @@ export class SyncEngine extends EventEmitter<SyncEvents> {
   private pendingUpdates = new Map<string, Uint8Array[]>();
   private syncTimer: any = null;
   private syncTimerIsRaf: boolean = false;
+  private protocol: SyncProtocol = new DefaultSyncProtocol();
 
   constructor(
     private readonly config: ZerithDBConfig,
