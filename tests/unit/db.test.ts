@@ -29,7 +29,7 @@ describe("DbClient — CollectionClient", () => {
       const result = await col.insert({ text: "hello" });
       expect(result.id).toBeDefined();
       expect(typeof result.id).toBe("string");
-      expect(result.id.length).toBeGreaterThan(0);
+      expect(String(result.id).length).toBeGreaterThan(0);
     });
 
     it("should securely persist the inserted document in the database so that subsequent find() queries can retrieve it", async () => {
@@ -115,6 +115,62 @@ describe("DbClient — CollectionClient", () => {
       await col.insert({ x: 1 });
       const result = await col.find({ x: { $gt: 100 } });
       expect(result).toHaveLength(0);
+    });
+
+    it("should support regex matching with native RegExp patterns", async () => {
+      const col = db.collection<{ title: string }>("notes-regex-native");
+      await col.insertMany([
+        { title: "Team meeting notes" },
+        { title: "Shopping list" },
+        { title: "Daily standup" },
+      ]);
+
+      const result = await col.find({ title: { $regex: /meeting/ } });
+      expect(result).toHaveLength(1);
+      expect(result[0]?.title).toBe("Team meeting notes");
+    });
+
+    it("should support case-insensitive regex matching", async () => {
+      const col = db.collection<{ title: string }>("notes-regex-case");
+      await col.insertMany([
+        { title: "MEETING prep" },
+        { title: "meeting recap" },
+        { title: "brainstorm" },
+      ]);
+
+      const result = await col.find({ title: { $regex: /meeting/i } });
+      expect(result).toHaveLength(2);
+    });
+
+    it("should support string-based regex patterns with flags", async () => {
+      const col = db.collection<{ title: string }>("notes-regex-flags");
+      await col.insertMany([
+        { title: "MEETING agenda" },
+        { title: "meeting recap" },
+        { title: "roadmap" },
+      ]);
+
+      const result = await col.find({ title: { $regex: "meeting", $flags: "i" } });
+      expect(result).toHaveLength(2);
+    });
+
+    it("should return no matches when regex pattern does not match", async () => {
+      const col = db.collection<{ title: string }>("notes-regex-nomatch");
+      await col.insertMany([{ title: "Groceries" }, { title: "Workout" }]);
+
+      const result = await col.find({ title: { $regex: /meeting/ } });
+      expect(result).toHaveLength(0);
+    });
+
+    it("should handle invalid regex inputs gracefully without throwing", async () => {
+      const col = db.collection<{ title: string }>("notes-regex-invalid");
+      await col.insertMany([{ title: "meeting notes" }, { title: "other" }]);
+
+      const invalidPattern = await col.find({ title: { $regex: "(" } });
+      expect(invalidPattern).toHaveLength(0);
+
+      const invalidFlags = await col.find({ title: { $regex: "meeting", $flags: "z" } });
+      expect(invalidFlags).toHaveLength(0);
     });
   });
 
