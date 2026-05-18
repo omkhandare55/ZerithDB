@@ -55,8 +55,9 @@ export class WalletProxy extends EventEmitter<AuthEvents> implements IAuthManage
           if (this._identity) {
             this.emit("identity:change", this._identity);
           }
-        } catch {
+        } catch (err) {
           // No active session or error
+          console.warn("[WalletProxy] Could not fetch existing identity on ready:", err);
         }
         return;
       }
@@ -81,8 +82,33 @@ export class WalletProxy extends EventEmitter<AuthEvents> implements IAuthManage
     const request: WalletRequest = { id, type, payload, appId: this.appId };
 
     return new Promise((resolve, reject) => {
-      this.pendingRequests.set(id, { resolve, reject });
-      this.iframe?.contentWindow?.postMessage(request, this.walletOrigin);
+      const timeout = setTimeout(() => {
+        this.pendingRequests.delete(id);
+        reject(new Error(`[WalletProxy] Request timeout for type: ${type}`));
+      }, 10000); // 10 seconds timeout
+
+      this.pendingRequests.set(id, { 
+        resolve: (value) => {
+          clearTimeout(timeout);
+          resolve(value);
+        }, 
+        reject: (reason) => {
+          clearTimeout(timeout);
+          reject(reason);
+        } 
+      });
+
+      try {
+        if (!this.iframe?.contentWindow) {
+          throw new Error("Iframe content window is not available");
+        }
+        this.iframe.contentWindow.postMessage(request, this.walletOrigin);
+      } catch (error) {
+        clearTimeout(timeout);
+        this.pendingRequests.delete(id);
+        console.error(`[WalletProxy] Error posting message for ${type}:`, error);
+        reject(error);
+      }
     });
   }
 

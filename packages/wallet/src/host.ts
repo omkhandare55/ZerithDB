@@ -10,7 +10,7 @@ export class WalletHost {
   private auth: AuthManager;
   private allowedOrigins: Set<string>;
 
-  constructor(config: ZerithDBConfig, allowedOrigins: string[] = ["*"]) {
+  constructor(config: ZerithDBConfig, allowedOrigins: string[] = []) {
     this.auth = new AuthManager(config);
     this.allowedOrigins = new Set(allowedOrigins);
     this.setupListeners();
@@ -34,7 +34,10 @@ export class WalletHost {
   }
 
   private isOriginAllowed(origin: string): boolean {
-    if (this.allowedOrigins.has("*")) return true;
+    if (this.allowedOrigins.has("*")) {
+      console.warn("[WalletHost] Warning: Wildcard '*' origin is allowed. This is insecure.");
+      return true;
+    }
     return this.allowedOrigins.has(origin);
   }
 
