@@ -1,3 +1,5 @@
+import type { EphemeralConfig } from "./sync.js";
+
 export interface SyncConfig {
   /**
    * WebSocket URL of the ZerithDB signaling server.
@@ -24,13 +26,25 @@ export interface SyncConfig {
    * @default 10
    */
   maxPeers?: number;
+/**
+ * Delay between sync broadcasts in ms.
+ * Helps batch rapid Yjs updates together.
+ * @default 100
+ */
+updateThrottleMs?: number;
+
+/**
+ * Signaling transport preference.
+ * - `"auto"`      — Try WebSocket first, fall back to HTTP long-polling (default)
+ * - `"websocket"` — WebSocket only (original behavior)
+ * - `"polling"`   — HTTP long-polling only (for strict firewall environments)
+ * @default "auto"
+ */
+transport?: "auto" | "websocket" | "polling";
 
   /**
-   * Signaling transport preference.
-   * - `"auto"`      — Try WebSocket first, fall back to HTTP long-polling (default)
-   * - `"websocket"` — WebSocket only (original behavior)
-   * - `"polling"`   — HTTP long-polling only (for strict firewall environments)
-   * @default "auto"
+   * Configuration for the {@link EphemeralStateManager}.
+   * Controls broadcast throttling and stale-peer cleanup timing.
    */
   transport?: "auto" | "websocket" | "polling";
 
@@ -53,6 +67,12 @@ export interface AuthConfig {
    * @default "__zerithdb_identity"
    */
   storageKey?: string;
+
+  /**
+   * URL of the shared wallet iframe for cross-origin identity management.
+   * Required when using WalletProxy instead of local AuthManager.
+   */
+  walletUrl?: string;
 }
 
 export interface DebugConfig {
@@ -100,6 +120,7 @@ export interface ZerithDBConfig {
   auth?: AuthConfig;
   network?: NetworkConfig;
   debug?: DebugConfig;
+  conflictResolver?: ConflictResolverConfig;
 
   /**
    * Log level for internal ZerithDB diagnostics.
@@ -107,3 +128,4 @@ export interface ZerithDBConfig {
    */
   logLevel?: "debug" | "info" | "warn" | "error" | "silent";
 }
+
